@@ -57,15 +57,28 @@ impl Scanner {
     }
 
     fn number(&mut self) {
+        while self.peek().is_ascii_digit() {
+            self.advance();
+        }
+        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
+            self.advance();
+            while self.peek().is_ascii_digit() {
+                self.advance();
+            }
+        }
+        self.add(TokenType::Number);
         // TODO(you): scan a number literal: digits, then a fractional part only when a digit
         //            follows the dot (1.4).
-        todo!("number")
     }
 
     fn identifier(&mut self) {
+        while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
+            self.advance();
+        }
+        let word: String = self.src[self.start..se;f.current].iter().collect();
+        self.add(keyword(&word).unwrap_or(TokenType::Identifier));
         // TODO(you): scan an identifier, then decide whether it is a keyword; keyword() in
         //            token.rs does the lookup (1.2, 1.3).
-        todo!("identifier")
     }
 
     // --- primitives ---------------------------------------------------------------
