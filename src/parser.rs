@@ -199,26 +199,59 @@ impl Parser {
     }
 
     fn comparison(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
+        let mut expr = self.term()?;
+        while self.matches(&[TokenType::Greater, TokenType::GreaterEqual, TokenType::Less, TokenType::LessEqual]) {
+            let op = self.previous();
+            let right = self.term()?;
+            expr = Expr::Binary { 
+                left: Box::new(expr),
+                operator: op,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
         self.term()
     }
 
     fn term(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
+        let mut expr = self.factor()?;
+        while self.matches(&[TokenType::Minus, TokenType::Plus]) {
+            let op = self.previous();
+            let right = self.factor()?;
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                operator: op,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
         todo!("term")
     }
 
     fn factor(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2, one rung of the precedence ladder.
-        todo!("factor")
+        let mut expr = self.unary()?;
+        while self.matches(&[TokenType::Slash, TokenType::Star]) {
+            let op = self.previous();
+            let right = self.unary()?;
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                operator: op,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+        
     }
 
     fn unary(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2: unary operators are right-associative.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
+        if self.matches(&[TokenType::Bang, TokenType::Minus]) {
+            let op = self.previous();
+            let right = self.unary()?;
+            return Ok(Expr::Unary {
+                operator: op,
+                right: Box::new(right),
+            });
+        }
         self.call()
     }
 
