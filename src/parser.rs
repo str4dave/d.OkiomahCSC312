@@ -258,22 +258,70 @@ impl Parser {
     /// A loop, not recursion: `f(1)(2)` is one callee called twice, and the grammar says
     /// `call → primary ( "(" arguments? ")" )*` for exactly that reason.
     fn call(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2: call -> primary ( '(' arguments? ')' )*. That is a loop, not
-        //            recursion; f(1)(2) is one callee called twice.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
+        let mut expr = self.primary()?;
+        loop {
+            if self.matches(&[TokenType::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
+    }
+    fn finish_call(&mut self, callee: Expr) -> Parsed<Expr> {
+        let mut arguments = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                arguments.push(self.expression()?);
+                if !self.matches(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        let paren = self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
+        Ok(Expr::Call {
+            callee: Box::new(callee),
+            paren,
+            arguments,
+        })
+    }
         self.primary()
     }
 
     fn primary(&mut self) -> Parsed<Expr> {
-        // TODO(you): spec 3.2: literals, identifiers and grouping.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
+        if self.matches(&[TokenType::False]) {
+            return Ok(self.literal(Value::Bool(false)));
+        }
+        if self.matches(&[TokenType::True]) {
+            return Ok(self.literal(Value::Bool(true)));
+        }
+        if self.matches(&[TokenType::Nil]) {
+            return Ok(self.literal(Value::Nil));
+        }
         if self.matches(&[TokenType::Number]) {
             let n = self.previous().lexeme.parse::<f64>().unwrap();
             return Ok(self.literal(Value::Number(n)));
         }
-        self.error("Expect expression.");
+
+        if self.matches(&[TokenType::String]) {
+            let s = self.previous().lexeme.clone();
+            return Ok(self.literal(Value::String(s)));
+        }
+        if self.matches(&[TokenType::Identifier]) {
+            return Ok(Expr::Variable {
+                name: self.previous(),
+                at: Resolved::Global,
+            });
+        }
+
+        if self.matches(&[TokenType::LeftParen]) {
+            let expr = self.expression()?;
+            self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
+            return Ok(Expr::Grouping {
+                expression: Box::new(expr),
+            });
+        }  
+        self.error("Expect expression."); 
         Err(())
     }
 
