@@ -128,18 +128,18 @@ impl Parser {
     }
 
     fn statement_inner(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: pick the statement by its leading token.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
-        // Named rather than misreported, so an `if` says what it is instead of failing
-        // as a broken expression.
-        if self.check(TokenType::LBrace) || self.check(TokenType::If)
-            || self.check(TokenType::While) || self.check(TokenType::Return)
-        {
-            self.error("This statement form is not written yet.");
-            return Err(());
-        }
         if self.matches(&[TokenType::Print]) {
+            self.print_statement()
+        } else if self.matches(&[TokenType::If]) {
+            self.if_statement()
+        } else if self.matches(&[TokenType::While]) {
+            self.while_statement()
+        } else if self.matches(&[TokenType::Return]) {
+            self.return_statement()
+        } else if self.matches(&[TokenType::LeftBrace]) {
+            let body = self.block()?;
+            Ok(Stmt::Block { body, locals: 0 })
+        } else if self.matches(&[TokenType::Print]) {
             let value = self.expression()?;
             self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
             Ok(Stmt::Print(value))
@@ -148,29 +148,60 @@ impl Parser {
             self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
             Ok(Stmt::Expression(expr))
         }
-    }
+            self.expression_statement()
+        }
 
     fn return_statement(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: 'return' expression? ';'
-        todo!("return_statement")
+        let keyword = self.previous();
+        let value = if !self.check(TokenType::Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
+        Ok(Stmt::Return(value))
     }
 
     fn if_statement(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1. The dangling else binds to the nearest unmatched if , the
-        //            recursion decides that, not the grammar.
-        todo!("if_statement")
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after if condition.")?;
+
+        let then_branch = Box::new(self.statement()?);
+
+        let else_branch = if self.matches(&[TokenType::Else]) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+
+        Ok(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
     }
 
     fn while_statement(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: 'while' '(' expression ')' statement
-        todo!("while_statement")
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after condition.")?;
+        let body = Box::new(self.statement()?);
+
+        Ok(Stmt::While { condition, body })
+
     }
 
-    /// The `{` is already consumed. Declarations, not statements: a block is where a
-    /// `var` most often appears, and the whole point of one is that the name dies at `}`.
     fn block(&mut self) -> Parsed<Vec<Stmt>> {
-        // TODO(you): spec 3.1: '{' declaration* '}'
-        todo!("block")
+        let mut statements = Vec::new();
+        while !self.check(TokenType::RightBrace) && !self.at_end() {
+            match self.declaration() {
+                Ok(stmt) => statements.push(stmt),
+                Err(()) => self.synchronise(),
+            }
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+        Ok(statements)
     }
 
     // --- expressions, lowest precedence first --------------------------------------
@@ -282,7 +313,6 @@ impl Parser {
             };
         }
         Ok(expr)
-        todo!("term")
     }
 
     fn factor(&mut self) -> Parsed<Expr> {
@@ -393,16 +423,25 @@ impl Parser {
     /// the parse makes progress; a recovery that could stand still would hang the
     /// compiler on the file that triggered it.
     fn synchronise(&mut self) {
-        // TODO(you): spec 5.2: after an error, discard tokens until just past a ';' or on a
-        //            statement keyword, so one mistake costs one message.
-        // TEMPORARY: enough of this rule to let the ones below it run. Replace it in its
-        //            own week; the marking tests for it fail until you do.
         self.depth = 0;
         while !self.at_end() {
             self.current += 1;
             if self.previous().kind == TokenType::Semicolon {
                 return;
             }
+
+            match self.peek().kind {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => {}
+            }
+            self.current += 1;
         }
     }
 
@@ -465,4 +504,3 @@ impl Parser {
         self.errors
             .push(format!("[line {}] Error at {}: {}", t.line, at, message));
     }
-}
