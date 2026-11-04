@@ -65,14 +65,59 @@ impl Parser {
     }
 
     fn fun_declaration(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: a function declaration, its parameter list, and its body.
-        //            Functions are hoisted into Program::functions.
-        todo!("fun_declaration")
+        let name_token = self.consume(TokenType::Identifier, "Expect function name.")?;
+        let name = name_token.lexeme.clone();
+        let line = name_token.line;
+
+        self.consume(TokenType::LeftParen, "Expect '(' after function name.")?;
+        let mut parameters = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                let param = self.consume(TokenType::Identifier, "Expect parameter name.")?;
+                params.push(param.lexeme);
+                if !self.matches(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body.")?;
+        let body = self.block()?;
+
+        let function = Function {
+            name: name.clone(),
+            parameters,
+            body,
+            line,
+        };
+
+        self.program.functions.push(function);
+        let index = self.program.functions.len() - 1;
+
+        Ok(Stmt::Function {
+            name,
+            index,
+            line,
+        })
     }
 
     fn var_declaration(&mut self) -> Parsed<Stmt> {
-        // TODO(you): spec 3.1: 'var' name ( '=' expression )? ';'
-        todo!("var_declaration")
+        let name_token = self.consume(TokenType::Identifier, "Expect variable name.")?;
+
+        let initializer = if self.matches(&[TokenType::Equal]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenType::Semicolon, "Expect ';' after variable declaration.")?;
+
+        Ok(Stmt::Var {
+            name,
+            initialiser,
+            slot: None,
+        })
     }
 
     fn statement(&mut self) -> Parsed<Stmt> {
