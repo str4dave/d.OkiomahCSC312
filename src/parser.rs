@@ -13,9 +13,8 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<String>) {
         errors: Vec::new(),
     };
     while !p.at_end() {
-        match p.declaration() {
-            Ok(s) => p.program.stmts.push(s),
-            Err(()) => p.synchronise(),
+        if let Ok(s) = p.declaration() {
+            p.program.stmts.push(s);
         }
     }
     (p.program, p.errors)
@@ -388,7 +387,12 @@ impl Parser {
         }
 
         if self.matches(&[TokenType::Str]) {
-            let s = self.previous().lexeme.clone();
+            let lexeme = self.previous().lexeme.clone();
+            let s = if lexeme.starts_with('"') && lexeme.ends_with('"') && lexeme.len() >= 2 {
+                lexeme[1..lexeme.len() - 1].to_string()
+            } else {
+                lexeme
+            };
             return Ok(self.literal(Value::Str(s)));
         }
         if self.matches(&[TokenType::Identifier]) {
