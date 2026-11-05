@@ -179,7 +179,7 @@ impl Parser {
     fn while_statement(&mut self) -> Parsed<Stmt> {
         self.consume(TokenType::LParen, "Expect '(' after 'while'.")?;
         let condition = self.expression()?;
-        self.consume(TokenType::RParen, "Expect ')' after condition.")?;
+        self.consume(TokenType::RParen, "Expect ')' after while condition.")?;
         let body = Box::new(self.statement()?);
 
         Ok(Stmt::While { condition, body })
