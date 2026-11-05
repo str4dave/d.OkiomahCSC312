@@ -436,7 +436,8 @@ impl Parser {
                 | TokenType::If
                 | TokenType::While
                 | TokenType::Print
-                | TokenType::Return => return,
+                | TokenType::Return
+                | TokenType::RBrace => return,
                 _ => {}
             }
             self.current += 1;
