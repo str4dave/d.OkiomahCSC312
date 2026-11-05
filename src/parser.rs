@@ -13,8 +13,9 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<String>) {
         errors: Vec::new(),
     };
     while !p.at_end() {
-        if let Ok(s) = p.declaration() {
-            p.program.stmts.push(s);
+        match p.declaration() {
+            Ok(s) => p.program.stmts.push(s),
+            Err(()) => p.synchronise(),
         }
     }
     (p.program, p.errors)
@@ -190,7 +191,7 @@ impl Parser {
         while !self.check(TokenType::RBrace) && !self.at_end() {
             match self.declaration() {
                 Ok(stmt) => statements.push(stmt),
-                Err(()) => self.synchronise(),
+                Err(()) => {}
             }
         }
         self.consume(TokenType::RBrace, "Expect '}' after block.")?;
@@ -422,10 +423,9 @@ impl Parser {
     /// the parse makes progress; a recovery that could stand still would hang the
     /// compiler on the file that triggered it.
     fn synchronise(&mut self) {
-        self.depth = 0;
-        self.current += 1; // Always step over at least one token
-
         while !self.at_end() {
+            self.current += 1;
+
             if self.previous().kind == TokenType::Semicolon {
                 return;
             }
@@ -436,11 +436,9 @@ impl Parser {
                 | TokenType::If
                 | TokenType::While
                 | TokenType::Print
-                | TokenType::Return
-                | TokenType::RBrace => return,
+                | TokenType::Return => return,
                 _ => {}
             }
-            self.current += 1;
         }
     }
 
