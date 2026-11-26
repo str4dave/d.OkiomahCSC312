@@ -338,15 +338,22 @@ impl<'a> Compiler<'a> {
     fn end_scope(&mut self, locals: usize) {
         let line = self.chunk.last_line();
 
-for _ in 0..locals {
-    self.chunk.write(Op::Pop, line);    
+        for _ in 0..locals {
+        self.chunk.write(Op::Pop, line);    
     }
 
     fn patch(&mut self, at: usize) {
-        let line = self.chunk.last_line();
+        let target = self.chunk.code.len();
 
-for _ in 0..locals {
-    self.chunk.write(Op::Pop, line);
+        match self.chunk.code[at] {
+    Op::Jump(_) => {
+        self.chunk.code[at] = Op::Jump(target);
     }
-        }
+
+    Op::JumpIfFalse(_) => {
+        self.chunk.code[at] = Op::JumpIfFalse(target);
+    }
+
+    _ => unreachable!(),
+}
 }
