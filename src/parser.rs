@@ -387,21 +387,36 @@ impl Parser {
             return Ok(self.literal(Value::Number(n)));
         }
 
-        if self.matches(&[TokenType::Str]) {
-            let lexeme = self.previous().lexeme.clone();
-            let s = if lexeme.starts_with('"') && lexeme.ends_with('"') && lexeme.len() >= 2 {
-                lexeme[1..lexeme.len() - 1].to_string()
-            } else {
-                lexeme
-            };
-            return Ok(self.literal(Value::Str(s)));
+        
+     if self.matches(&[TokenType::Str]) {
+    let lexeme = self.previous().lexeme.clone();
+    let content = &lexeme[1..lexeme.len() - 1];
+
+    let mut result = String::new();
+    let mut chars = content.chars();
+
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => result.push('\n'),
+                Some('t') => result.push('\t'),
+                Some('"') => result.push('"'),
+                Some('\\') => result.push('\\'),
+
+                Some(other) => {
+                    result.push('\\');
+                    result.push(other);
+                }
+
+                None => result.push('\\'),
+            }
+        } else {
+            result.push(c);
         }
-        if self.matches(&[TokenType::Identifier]) {
-            return Ok(Expr::Variable {
-                name: self.previous(),
-                at: Resolved::Global,
-            });
-        }
+    }
+
+    return Ok(self.literal(Value::Str(result)));
+}
 
         if self.matches(&[TokenType::LParen]) {
             let expr = self.expression()?;
