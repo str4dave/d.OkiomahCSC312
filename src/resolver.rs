@@ -24,7 +24,6 @@ pub fn resolve(program: &mut Program) {
     resolver.statements(&mut program.stmts);
 }
 
-
 struct Local {
     name: String,
     scope: usize,
@@ -47,58 +46,58 @@ impl Resolver {
     /// Returns how many locals the scope held: the number of `Pop`s the bytecode
     /// compiler owes for leaving it.
     fn end_scope(&mut self) -> usize {
-       let mut count = 0;
+        let mut count = 0;
 
-    while let Some(local) = self.locals.last() {
-    if local.scope != self.depth {
-        break;
-    }
+        while let Some(local) = self.locals.last() {
+            if local.scope != self.depth {
+                break;
+            }
 
-    self.locals.pop();
-    count += 1;
-    }
+            self.locals.pop();
+            count += 1;
+        }
 
-    self.depth -= 1;
-    count
+        self.depth -= 1;
+        count
     }
 
     fn declare(&mut self, name: &str) {
         if self.depth == 0 {
-        return;
-    }
+            return;
+        }
 
-    self.locals.push(Local {
-        name: name.to_string(),
-        scope: self.depth,
-        initialised: false,
-    });
-    
+        self.locals.push(Local {
+            name: name.to_string(),
+            scope: self.depth,
+            initialised: false,
+        });
+    }
 
     /// `None` at the top level of the script, where a declaration is a global.
     fn define(&mut self, name: &str) -> Option<usize> {
-       if self.depth == 0 {
-    return None;
-    }
+        if self.depth == 0 {
+            return None;
+        }
 
-    let slot = self.locals.len() - 1;
-    self.locals[slot].initialised = true;
-    Some(slot)
+        let slot = self.locals.len() - 1;
+        self.locals[slot].initialised = true;
+        Some(slot)
     }
 
     /// Innermost first, so the nearest declaration wins and an outer one stays shadowed.
     fn lookup(&self, name: &str) -> Resolved {
         for i in (0..self.locals.len()).rev() {
-    let local = &self.locals[i];
+            let local = &self.locals[i];
 
-    if local.name == name && local.initialised {
-        return Resolved::Local {
-            depth: self.depth - local.scope,
-            slot: i,
-            };
+            if local.name == name && local.initialised {
+                return Resolved::Local {
+                    depth: self.depth - local.scope,
+                    slot: i,
+                };
+            }
         }
-    }
 
-    Resolved::Global
+        Resolved::Global
     }
 
     fn statements(&mut self, stmts: &mut [Stmt]) {
