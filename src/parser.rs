@@ -69,15 +69,18 @@ impl Parser {
 
         self.consume(TokenType::LParen, "Expect '(' after function name.")?;
         let mut params = Vec::new();
+
         if !self.check(TokenType::RParen) {
             loop {
                 let param = self.consume(TokenType::Identifier, "Expect parameter name.")?;
                 params.push(param.lexeme);
+
                 if !self.matches(&[TokenType::Comma]) {
                     break;
                 }
             }
         }
+
         self.consume(TokenType::RParen, "Expect ')' after parameters.")?;
 
         self.consume(TokenType::LBrace, "Expect '{' before function body.")?;
@@ -148,11 +151,13 @@ impl Parser {
 
     fn return_statement(&mut self) -> Parsed<Stmt> {
         let _keyword = self.previous();
+
         let value = if !self.check(TokenType::Semicolon) {
             Some(self.expression()?)
         } else {
             None
         };
+
         self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
         Ok(Stmt::Return(value))
     }
@@ -188,12 +193,14 @@ impl Parser {
 
     fn block(&mut self) -> Parsed<Vec<Stmt>> {
         let mut statements = Vec::new();
+
         while !self.check(TokenType::RBrace) && !self.at_end() {
             match self.declaration() {
                 Ok(stmt) => statements.push(stmt),
                 Err(()) => {}
             }
         }
+
         self.consume(TokenType::RBrace, "Expect '}' after block.")?;
         Ok(statements)
     }
@@ -202,12 +209,14 @@ impl Parser {
 
     fn expression(&mut self) -> Parsed<Expr> {
         self.depth += 1;
+
         let result = if self.depth > MAX_NESTING {
             self.error("Too deeply nested.");
             Err(())
         } else {
             self.assignment()
         };
+
         self.depth -= 1;
         result
     }
@@ -236,53 +245,64 @@ impl Parser {
                 }
             }
         }
+
         Ok(expr)
     }
 
     fn or(&mut self) -> Parsed<Expr> {
         let mut expr = self.and()?;
+
         while self.matches(&[TokenType::Or]) {
             let op = self.previous();
             let right = self.and()?;
+
             expr = Expr::Logical {
                 left: Box::new(expr),
                 op,
                 right: Box::new(right),
             };
         }
+
         Ok(expr)
     }
 
     fn and(&mut self) -> Parsed<Expr> {
         let mut expr = self.equality()?;
+
         while self.matches(&[TokenType::And]) {
             let op = self.previous();
             let right = self.equality()?;
+
             expr = Expr::Logical {
                 left: Box::new(expr),
                 op,
                 right: Box::new(right),
             };
         }
+
         Ok(expr)
     }
 
     fn equality(&mut self) -> Parsed<Expr> {
         let mut expr = self.comparison()?;
+
         while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual]) {
             let op = self.previous();
             let right = self.comparison()?;
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
                 right: Box::new(right),
             };
         }
+
         Ok(expr)
     }
 
     fn comparison(&mut self) -> Parsed<Expr> {
         let mut expr = self.term()?;
+
         while self.matches(&[
             TokenType::Greater,
             TokenType::GreaterEqual,
@@ -291,40 +311,48 @@ impl Parser {
         ]) {
             let op = self.previous();
             let right = self.term()?;
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
                 right: Box::new(right),
             };
         }
+
         Ok(expr)
     }
 
     fn term(&mut self) -> Parsed<Expr> {
         let mut expr = self.factor()?;
+
         while self.matches(&[TokenType::Minus, TokenType::Plus]) {
             let op = self.previous();
             let right = self.factor()?;
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
                 right: Box::new(right),
             };
         }
+
         Ok(expr)
     }
 
     fn factor(&mut self) -> Parsed<Expr> {
         let mut expr = self.unary()?;
+
         while self.matches(&[TokenType::Slash, TokenType::Star]) {
             let op = self.previous();
             let right = self.unary()?;
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
                 right: Box::new(right),
             };
         }
+
         Ok(expr)
     }
 
@@ -332,11 +360,13 @@ impl Parser {
         if self.matches(&[TokenType::Bang, TokenType::Minus]) {
             let op = self.previous();
             let right = self.unary()?;
+
             return Ok(Expr::Unary {
                 op,
                 right: Box::new(right),
             });
         }
+
         self.call()
     }
 
@@ -344,6 +374,7 @@ impl Parser {
     /// `call → primary ( "(" arguments? ")" )*` for exactly that reason.
     fn call(&mut self) -> Parsed<Expr> {
         let mut expr = self.primary()?;
+
         loop {
             if self.matches(&[TokenType::LParen]) {
                 expr = self.finish_call(expr)?;
@@ -351,20 +382,25 @@ impl Parser {
                 break;
             }
         }
+
         Ok(expr)
     }
 
     fn finish_call(&mut self, callee: Expr) -> Parsed<Expr> {
         let mut arguments = Vec::new();
+
         if !self.check(TokenType::RParen) {
             loop {
                 arguments.push(self.expression()?);
+
                 if !self.matches(&[TokenType::Comma]) {
                     break;
                 }
             }
         }
+
         let paren = self.consume(TokenType::RParen, "Expect ')' after arguments.")?;
+
         Ok(Expr::Call {
             callee: Box::new(callee),
             paren,
@@ -376,53 +412,63 @@ impl Parser {
         if self.matches(&[TokenType::False]) {
             return Ok(self.literal(Value::Bool(false)));
         }
+
         if self.matches(&[TokenType::True]) {
             return Ok(self.literal(Value::Bool(true)));
         }
+
         if self.matches(&[TokenType::Nil]) {
             return Ok(self.literal(Value::Nil));
         }
+
         if self.matches(&[TokenType::Number]) {
             let n = self.previous().lexeme.parse::<f64>().unwrap();
             return Ok(self.literal(Value::Number(n)));
         }
 
-        
-     if self.matches(&[TokenType::Str]) {
-    let lexeme = self.previous().lexeme.clone();
-    let content = &lexeme[1..lexeme.len() - 1];
+        if self.matches(&[TokenType::Str]) {
+            let lexeme = self.previous().lexeme.clone();
+            let content = &lexeme[1..lexeme.len() - 1];
 
-    let mut result = String::new();
-    let mut chars = content.chars();
+            let mut result = String::new();
+            let mut chars = content.chars();
 
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.next() {
-                Some('n') => result.push('\n'),
-                Some('t') => result.push('\t'),
-                Some('"') => result.push('"'),
-                Some('\\') => result.push('\\'),
+            while let Some(c) = chars.next() {
+                if c == '\\' {
+                    match chars.next() {
+                        Some('n') => result.push('\n'),
+                        Some('t') => result.push('\t'),
+                        Some('"') => result.push('"'),
+                        Some('\\') => result.push('\\'),
 
-                Some(other) => {
-                    result.push('\\');
-                    result.push(other);
+                        Some(other) => {
+                            result.push('\\');
+                            result.push(other);
+                        }
+
+                        None => result.push('\\'),
+                    }
+                } else {
+                    result.push(c);
                 }
-
-                None => result.push('\\'),
             }
-        } else {
-            result.push(c);
-        }
-    }
 
-    return Ok(self.literal(Value::Str(result)));
-}
+            return Ok(self.literal(Value::Str(result)));
+        }
+
+        if self.matches(&[TokenType::Identifier]) {
+            return Ok(Expr::Variable {
+                name: self.previous(),
+                at: Resolved::Global,
+            });
+        }
 
         if self.matches(&[TokenType::LParen]) {
             let expr = self.expression()?;
             self.consume(TokenType::RParen, "Expect ')' after expression.")?;
             return Ok(Expr::Grouping(Box::new(expr)));
         }
+
         self.error("Expect expression.");
         Err(())
     }
@@ -474,6 +520,7 @@ impl Parser {
                 return true;
             }
         }
+
         false
     }
 
@@ -498,6 +545,7 @@ impl Parser {
             self.current += 1;
             return Ok(self.previous());
         }
+
         self.error(message);
         Err(())
     }
@@ -513,6 +561,7 @@ impl Parser {
         } else {
             format!("'{}'", one_line(&t.lexeme))
         };
+
         self.errors
             .push(format!("[line {}] Error at {}: {}", t.line, at, message));
     }
