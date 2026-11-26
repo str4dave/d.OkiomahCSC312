@@ -8,11 +8,22 @@ use crate::ast::{Expr, Function, Program, Resolved, Stmt};
 /// which is what makes mutual recursion legal, so a name that matches no local is a
 /// global by construction. Spec section 7.
 pub fn resolve(program: &mut Program) {
-    // TODO(you): spec 7, 'The resolver': walk every function body in its own frame (4.3), then
-    //            the script. A function's body sees its own scopes and the globals and nothing
-    //            between.
-    todo!("resolve")
+    for function in &mut program.functions {
+        let mut resolver = Resolver::default();
+        resolver.depth = 1;
+
+        for param in &function.params {
+            resolver.declare(param);
+            resolver.define(param);
+        }
+
+        resolver.statements(&mut function.body);
+    }
+
+    let mut resolver = Resolver::default();
+    resolver.statements(&mut program.stmts);
 }
+
 
 struct Local {
     name: String,
@@ -36,9 +47,19 @@ impl Resolver {
     /// Returns how many locals the scope held: the number of `Pop`s the bytecode
     /// compiler owes for leaving it.
     fn end_scope(&mut self) -> usize {
-        // TODO(you): close a scope and report how many locals died in it, which is how many
-        //            Pops the bytecode compiler owes.
-        todo!("end_scope")
+       let mut count = 0;
+
+    while let Some(local) = self.locals.last() {
+    if local.scope != self.depth {
+        break;
+    }
+
+    self.locals.pop();
+    count += 1;
+}
+
+    self.depth -= 1;
+    count
     }
 
     fn declare(&mut self, name: &str) {
