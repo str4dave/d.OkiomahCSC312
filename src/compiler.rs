@@ -357,3 +357,4 @@ impl<'a> Compiler<'a> {
     _ => unreachable!(),
 }
 }
+    }
