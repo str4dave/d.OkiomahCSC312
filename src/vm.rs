@@ -248,10 +248,44 @@ impl Vm {
     /// evaluated it. Nothing is moved: the arguments are already lying where the new
     /// frame's slots 0 upwards need them to be.
     fn call(&mut self, argc: usize, line: usize) -> Result<(), RuntimeError> {
-        // TODO(you): spec 4.3 again, on a stack instead of a tree: the arguments are already
-        //            lying where the callee's slots need them.
-        todo!("Vm::call")
+        let callee_index = self.stack.len() - argc - 1;
+    let callee = self.stack[callee_index].clone();
+
+    let index = match callee {
+    Value::Function { index, .. } => index,
+
+    _ => {
+        return Err(error(
+            line,
+            "This value is not a function.",
+        ));
     }
+};
+
+    let arity = self.bytecode.functions[index].arity;
+
+    if argc != arity {
+        return Err(error(
+        line,
+        &format!(
+            "Expected {} arguments but got {}.",
+            arity, argc
+        ),
+    ));
+}
+
+if self.frames.len() - 1 >= MAX_FRAMES {
+    return Err(error(line, "Stack overflow."));
+}
+
+self.frames.push(Frame {
+    function: Some(index),
+    ip: 0,
+    base: callee_index + 1,
+});
+
+Ok(())
+}
 
     // --- primitives -------------------------------------------------------------------
 
