@@ -56,17 +56,23 @@ impl Resolver {
 
     self.locals.pop();
     count += 1;
-}
+    }
 
     self.depth -= 1;
     count
     }
 
     fn declare(&mut self, name: &str) {
-        // TODO(you): introduce a binding that is not usable yet; its own initialiser must not
-        //            see it (4.2).
-        todo!("declare")
+        if self.depth == 0 {
+        return;
     }
+
+    self.locals.push(Local {
+        name: name.to_string(),
+        scope: self.depth,
+        initialised: false,
+    });
+    
 
     /// `None` at the top level of the script, where a declaration is a global.
     fn define(&mut self, name: &str) -> Option<usize> {
