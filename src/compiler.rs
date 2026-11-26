@@ -329,15 +329,17 @@ impl<'a> Compiler<'a> {
     fn name_constant(&mut self, name: &str) -> usize {
         self.chunk.constant(Value::Str(name.to_string()))
     }
+}
 
     /// Leaving a scope pops its locals off the stack, one `Pop` each. How many is the
     /// resolver's count, carried on the `Block`; this file no longer tracks scopes to
     /// work it out a second time. The interpreter dropped a whole `HashMap` here; the VM
     /// adjusts a stack pointer.
     fn end_scope(&mut self, locals: usize) {
-        // TODO(you): leave a scope: one Pop per local that dies here, and the resolver already
-        //            counted them onto the Block.
-        todo!("end_scope")
+        let line = self.chunk.last_line();
+
+for _ in 0..locals {
+    self.chunk.write(Op::Pop, line);    
     }
 
     fn patch(&mut self, at: usize) {
