@@ -1,0 +1,2 @@
+print "C:\\Users";
+// expect: C:\Users

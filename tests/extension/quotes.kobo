@@ -1,0 +1,2 @@
+print "He said \"Hello\"";
+// expect: He said "Hello"

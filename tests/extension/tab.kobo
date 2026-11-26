@@ -1,0 +1,2 @@
+print "A\tB" == "A	B";
+// expect: true
