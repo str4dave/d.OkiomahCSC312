@@ -72,109 +72,105 @@ impl<'a> Compiler<'a> {
 
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
-    Stmt::Expression(expr) => {
-        let line = self.expression(expr);
-        self.chunk.write(Op::Pop, line);
-    }
-
-    Stmt::Print(expr) => {
-        let line = self.expression(expr);
-        self.chunk.write(Op::Print, line);
-    }
-
-    Stmt::Var {
-        name,
-        initialiser,
-        slot,
-    } => {
-        match initialiser {
-            Some(expr) => {
-                self.expression(expr);
+            Stmt::Expression(expr) => {
+                let line = self.expression(expr);
+                self.chunk.write(Op::Pop, line);
             }
 
-            None => {
-                self.chunk.write(Op::Nil, name.line);
+            Stmt::Print(expr) => {
+                let line = self.expression(expr);
+                self.chunk.write(Op::Print, line);
+            }
+
+            Stmt::Var {
+                name,
+                initialiser,
+                slot,
+            } => {
+                match initialiser {
+                    Some(expr) => {
+                        self.expression(expr);
+                    }
+
+                    None => {
+                        self.chunk.write(Op::Nil, name.line);
+                    }
+                }
+
+                self.declare(&name.lexeme, *slot, name.line);
+            }
+
+            Stmt::Block { body, locals } => {
+                self.statements(body);
+                self.end_scope(*locals);
+            }
+
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let line = self.expression(condition);
+
+                let false_jump = self.chunk.write(Op::JumpIfFalse(0), line);
+
+                self.chunk.write(Op::Pop, line);
+                self.statement(then_branch);
+
+                let end_jump = self.chunk.write(Op::Jump(0), line);
+
+                self.patch(false_jump);
+                self.chunk.write(Op::Pop, line);
+
+                if let Some(branch) = else_branch {
+                    self.statement(branch);
+                }
+
+                self.patch(end_jump);
+            }
+
+            Stmt::While { condition, body } => {
+                let start = self.chunk.code.len();
+                let line = self.expression(condition);
+
+                let exit_jump = self.chunk.write(Op::JumpIfFalse(0), line);
+
+                self.chunk.write(Op::Pop, line);
+                self.statement(body);
+                self.chunk.write(Op::Jump(start), line);
+
+                self.patch(exit_jump);
+                self.chunk.write(Op::Pop, line);
+            }
+
+            Stmt::Function { index, name, slot } => {
+                let line = self.program.functions[*index].line;
+
+                let value = Value::Function {
+                    index: *index,
+                    name: name.clone(),
+                };
+
+                let constant = self.chunk.constant(value);
+
+                self.chunk.write(Op::Constant(constant), line);
+                self.declare(name, *slot, line);
+            }
+
+            Stmt::Return(value) => {
+                let line = match value {
+                    Some(expr) => self.expression(expr),
+
+                    None => {
+                        let line = self.chunk.last_line();
+                        self.chunk.write(Op::Nil, line);
+                        line
+                    }
+                };
+
+                self.chunk.write(Op::Return, line);
             }
         }
-
-        self.declare(&name.lexeme, *slot, name.line);
-    }
-
-    Stmt::Block { body, locals } => {
-        self.statements(body);
-        self.end_scope(*locals);
-    }
-
-    Stmt::If {
-        condition,
-        then_branch,
-        else_branch,
-    } => {
-        let line = self.expression(condition);
-
-        let false_jump =
-            self.chunk.write(Op::JumpIfFalse(0), line);
-
-        self.chunk.write(Op::Pop, line);
-        self.statement(then_branch);
-
-        let end_jump =
-            self.chunk.write(Op::Jump(0), line);
-
-        self.patch(false_jump);
-        self.chunk.write(Op::Pop, line);
-
-        if let Some(branch) = else_branch {
-            self.statement(branch);
-        }
-
-        self.patch(end_jump);
-    }
-
-    Stmt::While { condition, body } => {
-        let start = self.chunk.code.len();
-        let line = self.expression(condition);
-
-        let exit_jump =
-            self.chunk.write(Op::JumpIfFalse(0), line);
-
-        self.chunk.write(Op::Pop, line);
-        self.statement(body);
-        self.chunk.write(Op::Jump(start), line);
-
-        self.patch(exit_jump);
-        self.chunk.write(Op::Pop, line);
-    }
-
-    Stmt::Function { index, name, slot } => {
-        let line = self.program.functions[*index].line;
-
-        let value = Value::Function {
-            index: *index,
-            name: name.clone(),
-        };
-
-        let constant = self.chunk.constant(value);
-
-        self.chunk.write(Op::Constant(constant), line);
-        self.declare(name, *slot, line);
-    }
-
-    Stmt::Return(value) => {
-        let line = match value {
-            Some(expr) => self.expression(expr),
-
-            None => {
-                let line = self.chunk.last_line();
-                self.chunk.write(Op::Nil, line);
-                line
-            }
-        };
-
-        self.chunk.write(Op::Return, line);
-    }
-}
-        
     }
 
     // --- expressions ------------------------------------------------------------------
@@ -183,133 +179,131 @@ impl<'a> Compiler<'a> {
     /// follow-up instruction to.
     fn expression(&mut self, expr: &Expr) -> usize {
         match expr {
-    Expr::Literal { value, line } => {
-        let op = match value {
-            Value::Nil => Op::Nil,
-            Value::Bool(true) => Op::True,
-            Value::Bool(false) => Op::False,
+            Expr::Literal { value, line } => {
+                let op = match value {
+                    Value::Nil => Op::Nil,
+                    Value::Bool(true) => Op::True,
+                    Value::Bool(false) => Op::False,
 
-            _ => {
-                let index = self.chunk.constant(value.clone());
-                Op::Constant(index)
-            }
-        };
+                    _ => {
+                        let index = self.chunk.constant(value.clone());
+                        Op::Constant(index)
+                    }
+                };
 
-        self.chunk.write(op, *line);
-        *line
-    }
-
-    Expr::Grouping(inner) => {
-        self.expression(inner)
-    }
-
-    Expr::Variable { name, at } => {
-        let op = match at {
-            Resolved::Global => {
-                let index = self.name_constant(&name.lexeme);
-                Op::GetGlobal(index)
+                self.chunk.write(op, *line);
+                *line
             }
 
-            Resolved::Local { slot, .. } => {
-                Op::GetLocal(*slot)
-            }
-        };
-
-        self.chunk.write(op, name.line);
-        name.line
-    }
-
-    Expr::Assign { name, value, at } => {
-        self.expression(value);
-
-        let op = match at {
-            Resolved::Global => {
-                let index = self.name_constant(&name.lexeme);
-                Op::SetGlobal(index)
+            Expr::Grouping(inner) => {
+                self.expression(inner)
             }
 
-            Resolved::Local { slot, .. } => {
-                Op::SetLocal(*slot)
+            Expr::Variable { name, at } => {
+                let op = match at {
+                    Resolved::Global => {
+                        let index = self.name_constant(&name.lexeme);
+                        Op::GetGlobal(index)
+                    }
+
+                    Resolved::Local { slot, .. } => {
+                        Op::GetLocal(*slot)
+                    }
+                };
+
+                self.chunk.write(op, name.line);
+                name.line
             }
-        };
 
-        self.chunk.write(op, name.line);
-        name.line
-    }
+            Expr::Assign { name, value, at } => {
+                self.expression(value);
 
-    Expr::Unary { op, right } => {
-        self.expression(right);
+                let op = match at {
+                    Resolved::Global => {
+                        let index = self.name_constant(&name.lexeme);
+                        Op::SetGlobal(index)
+                    }
 
-        let instruction = match op.kind {
-            TokenType::Bang => Op::Not,
-            TokenType::Minus => Op::Negate,
-            _ => unreachable!(),
-        };
+                    Resolved::Local { slot, .. } => {
+                        Op::SetLocal(*slot)
+                    }
+                };
 
-        self.chunk.write(instruction, op.line);
-        op.line
-    }
+                self.chunk.write(op, name.line);
+                name.line
+            }
 
-    Expr::Binary { left, op, right } => {
-        self.expression(left);
-        self.expression(right);
+            Expr::Unary { op, right } => {
+                self.expression(right);
 
-        let instruction = match op.kind {
-            TokenType::Plus => Op::Add,
-            TokenType::Minus => Op::Subtract,
-            TokenType::Star => Op::Multiply,
-            TokenType::Slash => Op::Divide,
-            TokenType::EqualEqual => Op::Equal,
-            TokenType::BangEqual => Op::NotEqual,
-            TokenType::Greater => Op::Greater,
-            TokenType::GreaterEqual => Op::GreaterEqual,
-            TokenType::Less => Op::Less,
-            TokenType::LessEqual => Op::LessEqual,
-            _ => unreachable!(),
-        };
+                let instruction = match op.kind {
+                    TokenType::Bang => Op::Not,
+                    TokenType::Minus => Op::Negate,
+                    _ => unreachable!(),
+                };
 
-        self.chunk.write(instruction, op.line);
-        op.line
-    }
+                self.chunk.write(instruction, op.line);
+                op.line
+            }
 
-    Expr::Logical { left, op, right } => {
-        self.expression(left);
+            Expr::Binary { left, op, right } => {
+                self.expression(left);
+                self.expression(right);
 
-        if op.kind == TokenType::And {
-            let jump =
-                self.chunk.write(Op::JumpIfFalse(0), op.line);
+                let instruction = match op.kind {
+                    TokenType::Plus => Op::Add,
+                    TokenType::Minus => Op::Subtract,
+                    TokenType::Star => Op::Multiply,
+                    TokenType::Slash => Op::Divide,
+                    TokenType::EqualEqual => Op::Equal,
+                    TokenType::BangEqual => Op::NotEqual,
+                    TokenType::Greater => Op::Greater,
+                    TokenType::GreaterEqual => Op::GreaterEqual,
+                    TokenType::Less => Op::Less,
+                    TokenType::LessEqual => Op::LessEqual,
+                    _ => unreachable!(),
+                };
 
-            self.chunk.write(Op::Pop, op.line);
-            self.expression(right);
-            self.patch(jump);
-        } else {
-            let false_jump =
-                self.chunk.write(Op::JumpIfFalse(0), op.line);
+                self.chunk.write(instruction, op.line);
+                op.line
+            }
 
-            let end_jump =
-                self.chunk.write(Op::Jump(0), op.line);
+            Expr::Logical { left, op, right } => {
+                self.expression(left);
 
-            self.patch(false_jump);
+                if op.kind == TokenType::And {
+                    let jump = self.chunk.write(Op::JumpIfFalse(0), op.line);
 
-            self.chunk.write(Op::Pop, op.line);
-            self.expression(right);
-            self.patch(end_jump);
+                    self.chunk.write(Op::Pop, op.line);
+                    self.expression(right);
+                    self.patch(jump);
+                } else {
+                    let false_jump = self.chunk.write(Op::JumpIfFalse(0), op.line);
+
+                    let end_jump = self.chunk.write(Op::Jump(0), op.line);
+
+                    self.patch(false_jump);
+
+                    self.chunk.write(Op::Pop, op.line);
+                    self.expression(right);
+                    self.patch(end_jump);
+                }
+
+                op.line
+            }
+
+            Expr::Call { callee, paren, args } => {
+                self.expression(callee);
+
+                for arg in args {
+                    self.expression(arg);
+                }
+
+                self.chunk.write(Op::Call(args.len()), paren.line);
+                paren.line
+            }
         }
-
-        op.line
     }
-
-    Expr::Call { callee, paren, args } => {
-        self.expression(callee);
-
-        for arg in args {
-            self.expression(arg);
-        }
-
-        self.chunk.write(Op::Call(args.len()), paren.line);
-        paren.line
-    }
-}
 
     // --- names ------------------------------------------------------------------------
 
@@ -322,14 +316,14 @@ impl<'a> Compiler<'a> {
     /// the script's outermost declarations are globals and a function body's are not.
     fn declare(&mut self, name: &str, slot: Option<usize>, line: usize) {
         if slot.is_none() && !self.in_function {
-    let index = self.name_constant(name);
-    self.chunk.write(Op::DefineGlobal(index), line);
+            let index = self.name_constant(name);
+            self.chunk.write(Op::DefineGlobal(index), line);
+        }
     }
 
     fn name_constant(&mut self, name: &str) -> usize {
         self.chunk.constant(Value::Str(name.to_string()))
     }
-}
 
     /// Leaving a scope pops its locals off the stack, one `Pop` each. How many is the
     /// resolver's count, carried on the `Block`; this file no longer tracks scopes to
@@ -339,22 +333,23 @@ impl<'a> Compiler<'a> {
         let line = self.chunk.last_line();
 
         for _ in 0..locals {
-        self.chunk.write(Op::Pop, line);    
+            self.chunk.write(Op::Pop, line);
+        }
     }
 
     fn patch(&mut self, at: usize) {
         let target = self.chunk.code.len();
 
         match self.chunk.code[at] {
-    Op::Jump(_) => {
-        self.chunk.code[at] = Op::Jump(target);
-    }
+            Op::Jump(_) => {
+                self.chunk.code[at] = Op::Jump(target);
+            }
 
-    Op::JumpIfFalse(_) => {
-        self.chunk.code[at] = Op::JumpIfFalse(target);
-    }
+            Op::JumpIfFalse(_) => {
+                self.chunk.code[at] = Op::JumpIfFalse(target);
+            }
 
-    _ => unreachable!(),
-}
-}
+            _ => unreachable!(),
+        }
     }
+}
