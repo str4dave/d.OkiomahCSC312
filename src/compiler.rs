@@ -182,9 +182,134 @@ impl<'a> Compiler<'a> {
     /// Emits the code for `expr` and returns the line the caller should attribute its own
     /// follow-up instruction to.
     fn expression(&mut self, expr: &Expr) -> usize {
-        // TODO(you): emit code for one expression, and return the line it came from.
-        todo!("expression")
+        match expr {
+    Expr::Literal { value, line } => {
+        let op = match value {
+            Value::Nil => Op::Nil,
+            Value::Bool(true) => Op::True,
+            Value::Bool(false) => Op::False,
+
+            _ => {
+                let index = self.chunk.constant(value.clone());
+                Op::Constant(index)
+            }
+        };
+
+        self.chunk.write(op, *line);
+        *line
     }
+
+    Expr::Grouping(inner) => {
+        self.expression(inner)
+    }
+
+    Expr::Variable { name, at } => {
+        let op = match at {
+            Resolved::Global => {
+                let index = self.name_constant(&name.lexeme);
+                Op::GetGlobal(index)
+            }
+
+            Resolved::Local { slot, .. } => {
+                Op::GetLocal(*slot)
+            }
+        };
+
+        self.chunk.write(op, name.line);
+        name.line
+    }
+
+    Expr::Assign { name, value, at } => {
+        self.expression(value);
+
+        let op = match at {
+            Resolved::Global => {
+                let index = self.name_constant(&name.lexeme);
+                Op::SetGlobal(index)
+            }
+
+            Resolved::Local { slot, .. } => {
+                Op::SetLocal(*slot)
+            }
+        };
+
+        self.chunk.write(op, name.line);
+        name.line
+    }
+
+    Expr::Unary { op, right } => {
+        self.expression(right);
+
+        let instruction = match op.kind {
+            TokenType::Bang => Op::Not,
+            TokenType::Minus => Op::Negate,
+            _ => unreachable!(),
+        };
+
+        self.chunk.write(instruction, op.line);
+        op.line
+    }
+
+    Expr::Binary { left, op, right } => {
+        self.expression(left);
+        self.expression(right);
+
+        let instruction = match op.kind {
+            TokenType::Plus => Op::Add,
+            TokenType::Minus => Op::Subtract,
+            TokenType::Star => Op::Multiply,
+            TokenType::Slash => Op::Divide,
+            TokenType::EqualEqual => Op::Equal,
+            TokenType::BangEqual => Op::NotEqual,
+            TokenType::Greater => Op::Greater,
+            TokenType::GreaterEqual => Op::GreaterEqual,
+            TokenType::Less => Op::Less,
+            TokenType::LessEqual => Op::LessEqual,
+            _ => unreachable!(),
+        };
+
+        self.chunk.write(instruction, op.line);
+        op.line
+    }
+
+    Expr::Logical { left, op, right } => {
+        self.expression(left);
+
+        if op.kind == TokenType::And {
+            let jump =
+                self.chunk.write(Op::JumpIfFalse(0), op.line);
+
+            self.chunk.write(Op::Pop, op.line);
+            self.expression(right);
+            self.patch(jump);
+        } else {
+            let false_jump =
+                self.chunk.write(Op::JumpIfFalse(0), op.line);
+
+            let end_jump =
+                self.chunk.write(Op::Jump(0), op.line);
+
+            self.patch(false_jump);
+
+            self.chunk.write(Op::Pop, op.line);
+            self.expression(right);
+            self.patch(end_jump);
+        }
+
+        op.line
+    }
+
+    Expr::Call { callee, paren, args } => {
+        self.expression(callee);
+
+        for arg in args {
+            self.expression(arg);
+        }
+
+        self.chunk.write(Op::Call(args.len()), paren.line);
+        paren.line
+    }
+}
 
     // --- names ------------------------------------------------------------------------
 
