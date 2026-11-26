@@ -38,8 +38,77 @@ pub fn interpret(program: &Program) -> Result<(), RuntimeError> {
 }
 
 fn execute(stmt: &Stmt, env: &mut Environment, program: &Program) -> Exec<()> {
-    // TODO(you): spec 4: run one statement.
-    todo!("execute")
+    match stmt {
+    Stmt::Expression(expr) => {
+        evaluate(expr, env, program)?;
+    }
+
+    Stmt::Print(expr) => {
+        let value = evaluate(expr, env, program)?;
+        println!("{}", value);
+    }
+
+    Stmt::Var { name, initialiser, .. } => {
+        let value = match initialiser {
+            Some(expr) => evaluate(expr, env, program)?,
+            None => Value::Nil,
+        };
+
+        env.declare(&name.lexeme, value);
+    }
+
+    Stmt::Block { body, .. } => {
+        env.push_scope();
+
+        for statement in body {
+            if let Err(e) = execute(statement, env, program) {
+                env.pop_scope();
+                return Err(e);
+            }
+        }
+
+        env.pop_scope();
+    }
+
+    Stmt::If {
+        condition,
+        then_branch,
+        else_branch,
+    } => {
+        if evaluate(condition, env, program)?.is_truthy() {
+            execute(then_branch, env, program)?;
+        } else if let Some(branch) = else_branch {
+            execute(branch, env, program)?;
+        }
+    }
+
+    Stmt::While { condition, body } => {
+        while evaluate(condition, env, program)?.is_truthy() {
+            execute(body, env, program)?;
+        }
+    }
+
+    Stmt::Function { index, name, .. } => {
+        let value = Value::Function {
+            index: *index,
+            name: name.clone(),
+        };
+
+        env.declare(name, value);
+    }
+
+    Stmt::Return(value) => {
+        let result = match value {
+            Some(expr) => evaluate(expr, env, program)?,
+            None => Value::Nil,
+        };
+
+        return Err(Flow::Return(result));
+    }
+}
+
+Ok(())
+    
 }
 
 fn evaluate(expr: &Expr, env: &mut Environment, program: &Program) -> Exec<Value> {
