@@ -30,108 +30,140 @@ impl Scanner {
             self.start = self.current;
             self.scan_token();
         }
+
         self.start = self.current;
+
         let eof_line = match self.tokens.last() {
             Some(t) => t.line,
             None => 1,
         };
+
         self.line = eof_line;
         self.add(TokenType::Eof);
     }
 
     fn scan_token(&mut self) {
         let c = self.advance();
-    match c {
-    '(' => self.add(TokenType::LParen),
-    ')' => self.add(TokenType::RParen),
-    '{' => self.add(TokenType::LBrace),
-    '}' => self.add(TokenType::RBrace),
-    ',' => self.add(TokenType::Comma),
-    '-' => self.add(TokenType::Minus),
-    '+' => self.add(TokenType::Plus),
-    ';' => self.add(TokenType::Semicolon),
-    '*' => self.add(TokenType::Star),
-    '!' => {
-        let t = if self.matches('=') { TokenType::BangEqual } else { TokenType::Bang };
-        self.add(t);
-    }
-    '=' => {
-        let t = if self.matches('=') { TokenType::EqualEqual } else { TokenType::Equal };
-        self.add(t);
-    }
-    '<' => {
-        let t = if self.matches('=') { TokenType::LessEqual } else { TokenType::Less };
-        self.add(t);
-    }
-    '>' => {
-        let t = if self.matches('=') { TokenType::GreaterEqual } else { TokenType::Greater };
-        self.add(t);
-    }
-    '/' => {
-        if self.matches('/') {
-            while self.peek() != '\n' && !self.at_end() {
-                self.advance();
+
+        match c {
+            '(' => self.add(TokenType::LParen),
+            ')' => self.add(TokenType::RParen),
+            '{' => self.add(TokenType::LBrace),
+            '}' => self.add(TokenType::RBrace),
+            ',' => self.add(TokenType::Comma),
+            '-' => self.add(TokenType::Minus),
+            '+' => self.add(TokenType::Plus),
+            ';' => self.add(TokenType::Semicolon),
+            '*' => self.add(TokenType::Star),
+
+            '!' => {
+                let t = if self.matches('=') {
+                    TokenType::BangEqual
+                } else {
+                    TokenType::Bang
+                };
+
+                self.add(t);
             }
-        } else {
-            self.add(TokenType::Slash);
+
+            '=' => {
+                let t = if self.matches('=') {
+                    TokenType::EqualEqual
+                } else {
+                    TokenType::Equal
+                };
+
+                self.add(t);
+            }
+
+            '<' => {
+                let t = if self.matches('=') {
+                    TokenType::LessEqual
+                } else {
+                    TokenType::Less
+                };
+
+                self.add(t);
+            }
+
+            '>' => {
+                let t = if self.matches('=') {
+                    TokenType::GreaterEqual
+                } else {
+                    TokenType::Greater
+                };
+
+                self.add(t);
+            }
+
+            '/' => {
+                if self.matches('/') {
+                    while self.peek() != '\n' && !self.at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add(TokenType::Slash);
+                }
+            }
+
+            ' ' | '\r' | '\t' => {}
+            '\n' => self.line += 1,
+            '"' => self.string(),
+            c if c.is_ascii_digit() => self.number(),
+            c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
+
+            _ => {
+                let line = self.line;
+                self.error(line, "Character is not part of any token.");
+            }
         }
     }
-    ' ' | '\r' | '\t' => {}
-    '\n' => self.line += 1,
-    '"' => self.string(),
-    c if c.is_ascii_digit() => self.number(),
-    c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
-    _ => {
-        let line = self.line;
-        self.error(line, "Character is not part of any token.");
-    }
-    }
-    }
-
 
     fn string(&mut self) {
-       fn string(&mut self) {
-    let opened = self.line;
+        let opened = self.line;
 
-    while !self.at_end() && self.peek() != '"' {
-        if self.peek() == '\\' {
-            let next = self.peek_next();
+        while !self.at_end() && self.peek() != '"' {
+            if self.peek() == '\\' {
+                let next = self.peek_next();
 
-            if matches!(next, 'n' | 't' | '"' | '\\') {
-                self.advance();
-                self.advance();
-                continue;
+                if matches!(next, 'n' | 't' | '"' | '\\') {
+                    self.advance();
+                    self.advance();
+                    continue;
+                }
             }
+
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+
+            self.advance();
         }
 
-        if self.peek() == '\n' {
-            self.line += 1;
+        if self.at_end() {
+            self.error(opened, "String is never closed.");
+            return;
         }
 
         self.advance();
-    }
-
-    if self.at_end() {
-        self.error(opened, "String is never closed.");
-        return;
-    }
-
-    self.advance();
-    self.add(TokenType::Str);
-}
+        self.add(TokenType::Str);
     }
 
     fn number(&mut self) {
         while self.peek().is_ascii_digit() {
             self.advance();
         }
+
         if self.peek() == '.' && self.peek_next().is_ascii_digit() {
             self.advance();
+
             while self.peek().is_ascii_digit() {
                 self.advance();
             }
         }
+
         self.add(TokenType::Number);
+
         // TODO(you): scan a number literal: digits, then a fractional part only when a digit
         //            follows the dot (1.4).
     }
@@ -140,8 +172,11 @@ impl Scanner {
         while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
             self.advance();
         }
-       let word: String = self.src[self.start..self.current].iter().collect();
+
+        let word: String = self.src[self.start..self.current].iter().collect();
+
         self.add(keyword(&word).unwrap_or(TokenType::Identifier));
+
         // TODO(you): scan an identifier, then decide whether it is a keyword; keyword() in
         //            token.rs does the lookup (1.2, 1.3).
     }
@@ -162,6 +197,7 @@ impl Scanner {
         if self.at_end() || self.src[self.current] != expected {
             return false;
         }
+
         self.current += 1;
         true
     }
