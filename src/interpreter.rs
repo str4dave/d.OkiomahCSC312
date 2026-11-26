@@ -288,9 +288,50 @@ fn call(
     env: &mut Environment,
     program: &Program,
 ) -> Exec<Value> {
-    // TODO(you): spec 4.3: check arity, push a frame, declare the parameters, run the body, and
-    //            pop the frame on all three ways out.
-    todo!("call")
+    let function = &program.functions[index];
+
+if args.len() != function.params.len() {
+    return Err(err(
+        line,
+        &format!(
+            "Expected {} arguments but got {}.",
+            function.params.len(),
+            args.len()
+        ),
+    ));
+}
+
+if env.frame_depth() >= MAX_FRAMES {
+    return Err(err(line, "Stack overflow."));
+}
+
+env.push_frame();
+
+for (param, value) in function.params.iter().zip(args) {
+    env.declare(param, value);
+}
+
+for statement in &function.body {
+    match execute(statement, env, program) {
+        Ok(()) => {}
+
+        Err(Flow::Return(value)) => {
+            env.pop_frame();
+            return Ok(value);
+        }
+
+        Err(Flow::Error(e)) => {
+            env.pop_frame();
+            return Err(Flow::Error(e));
+        }
+    }
+}
+
+env.pop_frame();
+
+Ok(Value::Nil)
+    
+    
 }
 
 fn numbers(l: Value, r: Value, line: usize) -> Exec<(f64, f64)> {
