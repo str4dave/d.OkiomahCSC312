@@ -45,10 +45,204 @@ struct Vm {
 
 impl Vm {
     fn run(&mut self) -> Result<(), RuntimeError> {
-        // TODO(you): the dispatch loop: one match over Op. Spec 6.1 requires it to print
-        //            exactly what the interpreter prints, down to the exit code.
-        todo!("Vm::run")
+        loop {
+    let function = self.frame().function;
+    let ip = self.frame().ip;
+
+    let op = self.chunk(function).code[ip];
+    let line = self.chunk(function).lines[ip];
+
+    self.frame_mut().ip += 1;
+
+    match op {
+        Op::Constant(index) => {
+            let value =
+                self.chunk(function).constants[index].clone();
+
+            self.stack.push(value);
+        }
+
+        Op::Nil => {
+            self.stack.push(Value::Nil);
+        }
+
+        Op::True => {
+            self.stack.push(Value::Bool(true));
+        }
+
+        Op::False => {
+            self.stack.push(Value::Bool(false));
+        }
+
+        Op::Pop => {
+            self.pop();
+        }
+
+        Op::DefineGlobal(index) => {
+            let name = self.name(function, index);
+            let value = self.pop();
+
+            self.globals.insert(name, value);
+        }
+
+        Op::GetGlobal(index) => {
+            let name = self.name(function, index);
+
+            match self.globals.get(&name) {
+                Some(value) => {
+                    self.stack.push(value.clone());
+                }
+
+                None => {
+                    return Err(undefined(line, &name));
+                }
+            }
+        }
+
+        Op::SetGlobal(index) => {
+            let name = self.name(function, index);
+            let value = self.peek().clone();
+
+            if !self.globals.contains_key(&name) {
+                return Err(undefined(line, &name));
+            }
+
+            self.globals.insert(name, value);
+        }
+
+        Op::GetLocal(slot) => {
+            let index = self.frame().base + slot;
+            let value = self.stack[index].clone();
+
+            self.stack.push(value);
+        }
+
+        Op::SetLocal(slot) => {
+            let index = self.frame().base + slot;
+            let value = self.peek().clone();
+
+            self.stack[index] = value;
+        }
+
+        Op::Equal => {
+            self.binary_value(|a, b| Value::Bool(a == b));
+        }
+
+        Op::NotEqual => {
+            self.binary_value(|a, b| Value::Bool(a != b));
+        }
+
+        Op::Greater => {
+            self.compare(line, |a, b| a > b)?;
+        }
+
+        Op::GreaterEqual => {
+            self.compare(line, |a, b| a >= b)?;
+        }
+
+        Op::Less => {
+            self.compare(line, |a, b| a < b)?;
+        }
+
+        Op::LessEqual => {
+            self.compare(line, |a, b| a <= b)?;
+        }
+
+        Op::Add => {
+            let (a, b) = self.pop_two();
+
+            match (a, b) {
+                (Value::Number(x), Value::Number(y)) => {
+                    self.stack.push(Value::Number(x + y));
+                }
+
+                (Value::Str(x), Value::Str(y)) => {
+                    self.stack.push(Value::Str(x + &y));
+                }
+
+                _ => {
+                    return Err(error(
+                        line,
+                        "Operands must be two numbers or two strings.",
+                    ));
+                }
+            }
+        }
+
+        Op::Subtract => {
+            self.arith(line, |a, b| a - b)?;
+        }
+
+        Op::Multiply => {
+            self.arith(line, |a, b| a * b)?;
+        }
+
+        Op::Divide => {
+            let (a, b) = self.numbers(line)?;
+
+            if b == 0.0 {
+                return Err(error(line, "Division by zero."));
+            }
+
+            self.stack.push(Value::Number(a / b));
+        }
+
+        Op::Not => {
+            let value = self.pop();
+
+            self.stack.push(Value::Bool(!value.is_truthy()));
+        }
+
+        Op::Negate => {
+            match self.pop() {
+                Value::Number(n) => {
+                    self.stack.push(Value::Number(-n));
+                }
+
+                _ => {
+                    return Err(error(
+                        line,
+                        "Operand must be a number.",
+                    ));
+                }
+            }
+        }
+
+        Op::Print => {
+            let value = self.pop();
+            println!("{}", value);
+        }
+
+        Op::Jump(target) => {
+            self.frame_mut().ip = target;
+        }
+
+        Op::JumpIfFalse(target) => {
+            if !self.peek().is_truthy() {
+                self.frame_mut().ip = target;
+            }
+        }
+
+        Op::Call(argc) => {
+            self.call(argc, line)?;
+        }
+
+        Op::Return => {
+            let value = self.pop();
+
+            if self.frames.len() == 1 {
+                return Ok(());
+            }
+
+            let base = self.frame().base;
+
+            self.frames.pop();
+            self.stack.truncate(base - 1);
+            self.stack.push(value);
+        }
     }
+}
+ }
 
     /// The callee is on the stack underneath its arguments, put there by the code that
     /// evaluated it. Nothing is moved: the arguments are already lying where the new
