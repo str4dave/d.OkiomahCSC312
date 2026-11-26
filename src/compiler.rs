@@ -321,9 +321,9 @@ impl<'a> Compiler<'a> {
     /// resolver's answer and `in_function` is the one case it cannot express on its own:
     /// the script's outermost declarations are globals and a function body's are not.
     fn declare(&mut self, name: &str, slot: Option<usize>, line: usize) {
-        // TODO(you): a global is written into the globals map; a local is already on the stack
-        //            in the slot resolver.rs gave it, so it emits nothing.
-        todo!("declare")
+        if slot.is_none() && !self.in_function {
+    let index = self.name_constant(name);
+    self.chunk.write(Op::DefineGlobal(index), line);
     }
 
     fn name_constant(&mut self, name: &str) -> usize {
