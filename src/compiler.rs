@@ -343,7 +343,10 @@ for _ in 0..locals {
     }
 
     fn patch(&mut self, at: usize) {
-        // TODO(you): fill in a forward jump, whose target was not known when it was emitted.
-        todo!("patch")
+        let line = self.chunk.last_line();
+
+for _ in 0..locals {
+    self.chunk.write(Op::Pop, line);
     }
+        }
 }
