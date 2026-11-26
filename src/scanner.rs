@@ -90,21 +90,35 @@ impl Scanner {
 
 
     fn string(&mut self) {
-        let opened = self.line;
-        while !self.at_end() && self.peek() != '"' {
-            if self.peek() == '\n' {
-                self.line +=1;
+       fn string(&mut self) {
+    let opened = self.line;
+
+    while !self.at_end() && self.peek() != '"' {
+        if self.peek() == '\\' {
+            let next = self.peek_next();
+
+            if matches!(next, 'n' | 't' | '"' | '\\') {
+                self.advance();
+                self.advance();
+                continue;
             }
-            self.advance();
         }
-        if self.at_end() {
-            self.error(opened, "String is never closed.");
-            return;
+
+        if self.peek() == '\n' {
+            self.line += 1;
         }
+
         self.advance();
-        self.add(TokenType::Str);
-        // TODO(you): scan a string literal. A string may span lines (1.5); an unterminated one
-        //            is reported at the line it opened on (5.1).
+    }
+
+    if self.at_end() {
+        self.error(opened, "String is never closed.");
+        return;
+    }
+
+    self.advance();
+    self.add(TokenType::Str);
+}
     }
 
     fn number(&mut self) {
